@@ -1,24 +1,25 @@
 #!/bin/bash
+status=true
 
 dd bs=512 count=1 if=/dev/random of=random.bin 2>/dev/null
+python3 -c 'import sys; import base64; sys.stdout.buffer.write(base64.b85encode(sys.stdin.buffer.read()))' <random.bin >random.b85
 
-./base85 -e < random.bin > my_encoded.b85
-python3 -c "import sys, base64; sys.stdout.buffer.write(base64.b85encode(sys.stdin.buffer.read()))" < random.bin > py_encoded.b85
+./base85 -e <random.bin >random.b85.test
+./base85 -d <random.b85 >random.bin.test
 
-if cmp -s my_encoded.b85 py_encoded.b85; then
-    echo "Encoder: OK"
+if cmp -s random.b85 random.b85.test; then
+  echo "Encoder ok!"
 else
-    echo "Encoder: FAIL"
-    exit 1
+  echo "Encoder failed!" >&2
+  status=false
 fi
 
-./base85 -d < my_encoded.b85 > decoded.bin
-
-if cmp -s random.bin decoded.bin; then
-    echo "Decoder: OK"
+if cmp -s random.bin random.bin.test; then
+  echo "Decoder ok!"
 else
-    echo "Decoder: FAIL"
-    exit 1
+  echo "Decoder failed!" >&2
+  status=false
 fi
 
-exit 0
+rm -f random.bin random.b85 random.b85.test random.bin.test
+$status

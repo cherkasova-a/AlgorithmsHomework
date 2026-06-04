@@ -1,40 +1,23 @@
-# Настройки компилятора
-CXX = g++
-CXXFLAGS = -std=c++17 -Wall -Wextra -O2
-LD = $(CXX)
+include ../Makefile.inc
 
-GTEST_LIBS = -lgtest -lgtest_main -lpthread
+release : base85
 
-TARGET = base85
-UTEST_TARGET = utest
+base85  : base85.r.o base85ed.r.o
+	$(LD) -o $@ $^
 
-.PHONY: all release debug clean run_utest run_itest depends
+debug   : base85.d.o base85ed.d.o
+	$(LD) -o $@ $^
 
-all: release run_utest run_itest
+utest   : base85ed_test.d.o base85ed.d.o
+	$(LD)  -o $@ $^ $(GTEST_LIBS)
 
-release: base85.o base85ed.o
-	$(LD) -o $(TARGET) $^
+run_utest : utest
+	./$^
 
-debug: CXXFLAGS += -g
-debug: base85.o base85ed.o
-	$(LD) -o $(TARGET) $^
-
-$(UTEST_TARGET): base85ed_test.o base85ed.o
-	$(LD) -o $@ $^ $(GTEST_LIBS)
-
-run_utest: $(UTEST_TARGET)
-	./$(UTEST_TARGET)
-
-run_itest: release
-	@echo "Running integration tests..."
-	@chmod +x integration_test.sh
+run_itest : release
+	echo "Integration tests..."
 	./integration_test.sh
 
-clean:
-	rm -f *.o $(TARGET) $(UTEST_TARGET) random.bin* random.b85*
+all: depends run_utest run_itest
 
-%.o: %.cpp
-	$(CXX) $(CXXFLAGS) -c $< -o $@
-
-depends:
-	@echo "Dependencies updated"
+include Makefile.hdrdep
