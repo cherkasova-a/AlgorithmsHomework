@@ -47,3 +47,6 @@
 utest
 base85
 random.*
+*.bin
+*.b85
+
