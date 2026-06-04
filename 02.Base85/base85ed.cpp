@@ -1,97 +1,107 @@
+#include <iostream>
+#include <fstream>
 #include <vector>
-#include <cstdint>
 #include <string>
-#include <stdexcept>
-#include <cstring>
-#include <unistd.h>
-#include <sys/wait.h>
-#include <errno.h>
+#include <cstdint>
 
-#include "base85ed.h"
-
-static std::vector<uint8_t> run_command_io(const std::string &command, const std::vector<uint8_t> &in) {
-    int inpipe[2];
-    int outpipe[2];
-
-    if (pipe(inpipe) == -1) throw std::runtime_error(strerror(errno));
-    if (pipe(outpipe) == -1) {
-        close(inpipe[0]);
-        close(inpipe[1]);
-        throw std::runtime_error(strerror(errno));
+std::string encode_base85(const std::vector<uint8_t>& data) {
+  std::string result;
+  size_t i = 0;
+  for (; i + 4 <= data.size(); i += 4) {
+    uint32_t num = (data[i] << 24) | (data[i + 1] << 16) | (data[i + 2] << 8) | data[i + 3];
+    if (num == 0) {
+      result += 'z';
+    } else {
+      std::string block;
+      for (int j = 0; j < 5; ++j) {
+        block = static_cast<char>('!' + (num % 85)) + block;
+        num /= 85;
+      }
+      result += block;
     }
-
-    pid_t pid = fork();
-    if (pid == -1) {
-        close(inpipe[0]);
-        close(inpipe[1]);
-        close(outpipe[0]);
-        close(outpipe[1]);
-        throw std::runtime_error(strerror(errno));
+  }
+  if (i < data.size()) {
+    size_t padding = data.size() - i;
+    uint32_t num = 0;
+    for (size_t j = 0; j < 4; ++j) {
+      num <<= 8;
+      if (j < padding) {
+        num |= data[i + j];
+      }
     }
-
-    if (pid == 0) {
-        dup2(inpipe[0], STDIN_FILENO);
-        dup2(outpipe[1], STDOUT_FILENO);
-        close(inpipe[0]);
-        close(inpipe[1]);
-        close(outpipe[0]);
-        close(outpipe[1]);
-        execl("/bin/sh", "sh", "-c", command.c_str(), (char*)nullptr);
-        _exit(127);
+    std::string block;
+    for (int j = 0; j < 5; ++j) {
+      block = static_cast<char>('!' + (num % 85)) + block;
+      num /= 85;
     }
-
-    close(inpipe[0]);
-    close(outpipe[1]);
-
-    const uint8_t *wp = in.data();
-    ssize_t remaining = static_cast<ssize_t>(in.size());
-    while (remaining > 0) {
-        ssize_t n = write(inpipe[1], wp, remaining);
-        if (n == -1) {
-            if (errno == EINTR) continue;
-            close(inpipe[1]);
-            close(outpipe[0]);
-            waitpid(pid, nullptr, 0);
-            throw std::runtime_error(strerror(errno));
-        }
-        remaining -= n;
-        wp += n;
-    }
-    close(inpipe[1]);
-
-    std::vector<uint8_t> out;
-    uint8_t buf[4096];
-    while (true) {
-        ssize_t n = read(outpipe[0], buf, sizeof(buf));
-        if (n > 0) out.insert(out.end(), buf, buf + n);
-        else if (n == 0) break;
-        else {
-            if (errno == EINTR) continue;
-            close(outpipe[0]);
-            waitpid(pid, nullptr, 0);
-            throw std::runtime_error(strerror(errno));
-        }
-    }
-    close(outpipe[0]);
-
-    int status = 0;
-    if (waitpid(pid, &status, 0) == -1) throw std::runtime_error(strerror(errno));
-    if (!WIFEXITED(status) || WEXITSTATUS(status) != 0)
-        throw std::runtime_error("child exited with non-zero status");
-
-    return out;
+    result += block.substr(0, padding + 1);
+  }
+  return result;
 }
 
-std::vector<uint8_t> base85::encode(std::vector<uint8_t> const &bytes) {
-    return run_command_io(
-               "/usr/bin/env -S python3 -c 'import sys; import base64; sys.stdout.buffer.write(base64.b85encode(sys.stdin.buffer.read()))'",
-               bytes
-           );
+std::vector<uint8_t> decode_base85(const std::string& str) {
+  std::vector<uint8_t> result;
+  size_t i = 0;
+  while (i < str.size()) {
+    while (i < str.size() && (str[i] == ' ' || str[i] == '\n' || str[i] == '\r' || str[i] == '\t')) {
+      i++;
+    }
+    if (i >= str.size()) break;
+    if (str[i] == 'z') {
+      for (int j = 0; j < 4; ++j) result.push_back(0);
+      i++;
+      continue;
+    }
+    uint64_t num = 0;
+    size_t count = 0;
+    size_t start_i = i;
+    while (i < str.size() && count < 5) {
+      char c = str[i];
+      if (c == ' ' || c == '\n' || c == '\r' || c == '\t') {
+        i++;
+        continue;
+      }
+      if (c < '!' || c > 'u') {
+        i++;
+        continue;
+      }
+      num = num * 85 + (c - '!');
+      count++;
+      i++;
+    }
+    if (count == 5) {
+      result.push_back((num >> 24) & 0xFF);
+      result.push_back((num >> 16) & 0xFF);
+      result.push_back((num >> 8) & 0xFF);
+      result.push_back(num & 0xFF);
+    } else if (count > 1) {
+      size_t padding = 5 - count;
+      for (size_t j = 0; j < padding; ++j) {
+        num = num * 85 + 84;
+      }
+      for (size_t j = 0; j < count - 1; ++j) {
+        result.push_back((num >> (24 - j * 8)) & 0xFF);
+      }
+    }
+  }
+  return result;
 }
 
-std::vector<uint8_t> base85::decode(std::vector<uint8_t> const &b85str) {
-    return run_command_io(
-               "/usr/bin/env -S python3 -c 'import sys; import base64; sys.stdout.buffer.write(base64.b85decode(sys.stdin.buffer.read()))'",
-               b85str
-           );
+int main(int argc, char* argv[]) {
+  if (argc < 4) return 1;
+  std::string mode = argv[1];
+  std::string infile = argv[2];
+  std::string outfile = argv[3];
+  std::ifstream in(infile, std::ios::binary);
+  std::ofstream out(outfile, std::ios::binary);
+  if (!in.is_open() || !out.is_open()) return 1;
+  std::vector<uint8_t> data((std::istreambuf_iterator<char>(in)), std::istreambuf_iterator<char>());
+  if (mode == "-e") {
+    out << encode_base85(data);
+  } else if (mode == "-d") {
+    std::string str(data.begin(), data.end());
+    std::vector<uint8_t> decoded = decode_base85(str);
+    out.write(reinterpret_cast<const char*>(decoded.data()), decoded.size());
+  }
+  return 0;
 }
