@@ -37,13 +37,13 @@ std::vector<uint8_t> base85::encode(std::vector<uint8_t> const &bytes)
                        | (uint32_t)bytes[i + 3];
         std::vector<uint8_t> block(5);
 
-	for (int j = 4; j >= 0; --j)
-	{
-   	    block[j] = B85_ALPHABET[num % 85];
-   	    num /= 85;
-	}
+        for (int j = 4; j >= 0; --j)
+        {
+            block[j] = B85_ALPHABET[num % 85];
+            num /= 85;
+        }
 
-	result.insert(result.end(), block.begin(), block.end());
+        result.insert(result.end(), block.begin(), block.end());
     }
 
     size_t remaining = bytes.size() - i;
@@ -57,13 +57,13 @@ std::vector<uint8_t> base85::encode(std::vector<uint8_t> const &bytes)
         }
         std::vector<uint8_t> block(5);
 
-	for (int j = 4; j >= 0; --j)
-	{
-    	    block[j] = B85_ALPHABET[num % 85];
-    	    num /= 85;
-	}
+        for (int j = 4; j >= 0; --j)
+        {
+            block[j] = B85_ALPHABET[num % 85];
+            num /= 85;
+        }
 
-	result.insert(result.end(), block.begin(), block.begin() + remaining + 1);
+        result.insert(result.end(), block.begin(), block.begin() + remaining + 1);
     }
 
     return result;
