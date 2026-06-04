@@ -1,3 +1,7 @@
 #!/bin/bash
-echo "No integration tests specified"
-exit 0
+
+status=true
+
+# ---------------------------------------------------
+
+$status
