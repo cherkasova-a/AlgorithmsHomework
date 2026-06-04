@@ -9,22 +9,19 @@
 
 #include "base85ed.h"
 
-static std::vector<uint8_t> run_command_io(const std::string &command, const std::vector<uint8_t> &in)
-{
+static std::vector<uint8_t> run_command_io(const std::string &command, const std::vector<uint8_t> &in) {
     int inpipe[2];
     int outpipe[2];
 
     if (pipe(inpipe) == -1) throw std::runtime_error(strerror(errno));
-    if (pipe(outpipe) == -1)
-    {
+    if (pipe(outpipe) == -1) {
         close(inpipe[0]);
         close(inpipe[1]);
         throw std::runtime_error(strerror(errno));
     }
 
     pid_t pid = fork();
-    if (pid == -1)
-    {
+    if (pid == -1) {
         close(inpipe[0]);
         close(inpipe[1]);
         close(outpipe[0]);
@@ -32,8 +29,7 @@ static std::vector<uint8_t> run_command_io(const std::string &command, const std
         throw std::runtime_error(strerror(errno));
     }
 
-    if (pid == 0)
-    {
+    if (pid == 0) {
         dup2(inpipe[0], STDIN_FILENO);
         dup2(outpipe[1], STDOUT_FILENO);
         close(inpipe[0]);
@@ -49,11 +45,9 @@ static std::vector<uint8_t> run_command_io(const std::string &command, const std
 
     const uint8_t *wp = in.data();
     ssize_t remaining = static_cast<ssize_t>(in.size());
-    while (remaining > 0)
-    {
+    while (remaining > 0) {
         ssize_t n = write(inpipe[1], wp, remaining);
-        if (n == -1)
-        {
+        if (n == -1) {
             if (errno == EINTR) continue;
             close(inpipe[1]);
             close(outpipe[0]);
@@ -67,13 +61,11 @@ static std::vector<uint8_t> run_command_io(const std::string &command, const std
 
     std::vector<uint8_t> out;
     uint8_t buf[4096];
-    while (true)
-    {
+    while (true) {
         ssize_t n = read(outpipe[0], buf, sizeof(buf));
         if (n > 0) out.insert(out.end(), buf, buf + n);
         else if (n == 0) break;
-        else
-        {
+        else {
             if (errno == EINTR) continue;
             close(outpipe[0]);
             waitpid(pid, nullptr, 0);
@@ -90,18 +82,16 @@ static std::vector<uint8_t> run_command_io(const std::string &command, const std
     return out;
 }
 
-std::vector<uint8_t> base85::encode(std::vector<uint8_t> const &bytes)
-{
+std::vector<uint8_t> base85::encode(std::vector<uint8_t> const &bytes) {
     return run_command_io(
-        "/usr/bin/env -S python3 -c 'import sys; import base64; sys.stdout.buffer.write(base64.b85encode(sys.stdin.buffer.read()))'",
-        bytes
-    );
+               "/usr/bin/env -S python3 -c 'import sys; import base64; sys.stdout.buffer.write(base64.b85encode(sys.stdin.buffer.read()))'",
+               bytes
+           );
 }
 
-std::vector<uint8_t> base85::decode(std::vector<uint8_t> const &b85str)
-{
+std::vector<uint8_t> base85::decode(std::vector<uint8_t> const &b85str) {
     return run_command_io(
-        "/usr/bin/env -S python3 -c 'import sys; import base64; sys.stdout.buffer.write(base64.b85decode(sys.stdin.buffer.read()))'",
-        b85str
-    );
+               "/usr/bin/env -S python3 -c 'import sys; import base64; sys.stdout.buffer.write(base64.b85decode(sys.stdin.buffer.read()))'",
+               b85str
+           );
 }
